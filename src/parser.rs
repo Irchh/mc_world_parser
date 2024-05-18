@@ -3,7 +3,7 @@
 use std::iter::Peekable;
 use std::slice::Iter;
 use inbt::NbtTag;
-use crate::parse_error::ParseError;
+use crate::parse_error::McaParseError;
 
 #[derive(Debug)]
 pub struct ChunkLocation {
@@ -36,53 +36,52 @@ pub struct Region {
 }
 
 impl Region {
-    fn next(iterable: &mut Peekable<Iter<u8>>) -> Result<u8, ParseError> {
-        iterable.next().map(|n| *n).ok_or(ParseError::EndOfData)
+    fn next(iterable: &mut Peekable<Iter<u8>>) -> Result<u8, McaParseError> {
+        iterable.next().map(|n| *n).ok_or(McaParseError::EndOfData)
     }
 
-    fn next_byte(iterable: &mut Peekable<Iter<u8>>) -> Result<i8, ParseError> {
+    fn next_byte(iterable: &mut Peekable<Iter<u8>>) -> Result<i8, McaParseError> {
         Ok(i8::from_be_bytes([Self::next(iterable)?]))
     }
 
-    fn next_short(iterable: &mut Peekable<Iter<u8>>) -> Result<i16, ParseError> {
+    fn next_short(iterable: &mut Peekable<Iter<u8>>) -> Result<i16, McaParseError> {
         Ok(i16::from_be_bytes([Self::next(iterable)?, Self::next(iterable)?]))
     }
 
-    fn next_int(iterable: &mut Peekable<Iter<u8>>) -> Result<i32, ParseError> {
+    fn next_int(iterable: &mut Peekable<Iter<u8>>) -> Result<i32, McaParseError> {
         Ok(i32::from_be_bytes([
             Self::next(iterable)?, Self::next(iterable)?, Self::next(iterable)?, Self::next(iterable)?
         ]))
     }
 
-    fn next_long(iterable: &mut Peekable<Iter<u8>>) -> Result<i64, ParseError> {
+    fn next_long(iterable: &mut Peekable<Iter<u8>>) -> Result<i64, McaParseError> {
         Ok(i64::from_be_bytes([
             Self::next(iterable)?, Self::next(iterable)?, Self::next(iterable)?, Self::next(iterable)?,
             Self::next(iterable)?, Self::next(iterable)?, Self::next(iterable)?, Self::next(iterable)?
         ]))
     }
 
-    fn next_chunk_location(iterable: &mut Peekable<Iter<u8>>) -> Result<ChunkLocation, ParseError> {
+    fn next_chunk_location(iterable: &mut Peekable<Iter<u8>>) -> Result<ChunkLocation, McaParseError> {
         Ok(ChunkLocation {
             offset: u32::from_be_bytes([0, Self::next(iterable)?, Self::next(iterable)?, Self::next(iterable)?]) as usize,
             sectors: Self::next(iterable)? as usize,
         })
     }
 
-    fn next_chunk_timestamp(iterable: &mut Peekable<Iter<u8>>) -> Result<ChunkTimestamp, ParseError> {
+    fn next_chunk_timestamp(iterable: &mut Peekable<Iter<u8>>) -> Result<ChunkTimestamp, McaParseError> {
         Ok(ChunkTimestamp {
             modified_seconds: u32::from_be_bytes([ Self::next(iterable)?, Self::next(iterable)?, Self::next(iterable)?, Self::next(iterable)? ])}
         )
     }
-    fn next_chunk(iterable: &mut Peekable<Iter<u8>>) -> Result<NbtTag, ParseError> {
+    fn next_chunk(iterable: &mut Peekable<Iter<u8>>) -> Result<NbtTag, McaParseError> {
         let length = Self::next_int(iterable)?;
         // 1 - GZip (usually not used)
         // 2 - Zlib
         // 3 - Uncompressed (usually not used)
         let compression_type = Self::next_byte(iterable)?;
         let raw_data = iterable.take((length - 1) as usize).map(|n| *n).collect::<Vec<u8>>();
-        //eprintln!("raw_data size: {}, expected {}", raw_data.len(), length - 1);
         if raw_data.len() < (length - 1) as usize {
-            return Err(ParseError::EndOfData);
+            return Err(McaParseError::EndOfData);
         }
         let parser_result = match compression_type {
             1 => inbt::nbt_parser::parse_gzip(raw_data),
@@ -94,23 +93,20 @@ impl Region {
         Ok(parser_result.unwrap())
     }
 
-    pub fn parse_region(region_data: Vec<u8>) -> Result<Region, ParseError> {
+    pub fn parse_region(region_data: Vec<u8>) -> Result<Region, McaParseError> {
         if region_data.len() < 0x2000 {
-            return Err(ParseError::EndOfData);
+            return Err(McaParseError::EndOfData);
         }
         let mut data = region_data[0..8192].iter().peekable();
         let mut chunk_locations = vec![];
         let mut chunk_timestamps = vec![];
-        println!("Parsing chunk locations");
         for _ in 0..1024 {
             chunk_locations.push(Self::next_chunk_location(&mut data)?);
         }
-        println!("Parsing chunk timestamps");
         for _ in 0..1024 {
             chunk_timestamps.push(Self::next_chunk_timestamp(&mut data)?)
         }
 
-        println!("Parsing chunks");
         let mut chunks = vec![];
         for loc in &chunk_locations {
             if loc.offset != 0 && loc.sectors != 0 {
