@@ -2,8 +2,8 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum McaParseError {
-    //#[error("Failed parsing UTF-8 string: {0}")]
-    //StringUtf8Error(#[from] FromUtf8Error),
+    #[error("Faled parsing NBT: {0}")]
+    NbtParseError(#[from] inbt::NbtParseError),
     #[error("Hit end of data")]
     EndOfData,
 }
