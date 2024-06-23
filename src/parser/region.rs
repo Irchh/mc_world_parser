@@ -1,10 +1,9 @@
-#![allow(dead_code)]
-
-use std::fmt::{Display, Formatter};
 use std::iter::Peekable;
 use std::slice::Iter;
 use inbt::NbtTag;
-use crate::parse_error::McaParseError;
+use crate::{McaParseError, Position};
+use crate::parser::chunk::Chunk;
+use crate::parser::section::Section;
 
 #[derive(Debug)]
 pub struct ChunkLocation {
@@ -25,67 +24,22 @@ pub struct ChunkTimestamp {
 }
 
 #[derive(Debug)]
-pub struct Position {
-    x: i32,
-    y: i32,
-    z: i32,
-}
-
-impl Display for Position {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} / {} / {}", self.x, self.y, self.z)
-    }
-}
-
-#[derive(Debug)]
-pub struct Section {
-    // 4096 blocks
-    blocks: Vec<String>,
-    section_data: NbtTag,
-}
-
-impl Section {
-    /// Gets block relative to section origin
-    pub fn get(&self, x: i32, y: i32, z: i32) -> Option<&String> {
-        let range = 0..16;
-        if !range.contains(&x) || !range.contains(&y) || !range.contains(&z) {
-            return None;
-        }
-        let block_pos = y*16*16 + z*16 + x;
-        Some(&self.blocks[block_pos as usize])
-    }
-}
-
-#[derive(Debug)]
-pub struct Chunk {
-    data_version: i32,
-    position: Position,
-    status: String,
-    sections: Vec<Section>,
-    chunk_data: NbtTag,
-}
-
-impl Chunk {
-    /// Gets block relative to chunk origin
-    pub fn get(&self, x: i32, mut y: i32, z: i32) -> Option<&String> {
-        if !(-64..320).contains(&y) {
-            return None;
-        }
-        y += 64;
-        let section = y/16;
-        self.sections[section as usize].get(x, y%16, z)
-    }
-
-    pub fn is_finished(&self) -> bool {
-        &*self.status == "minecraft:full"
-    }
-}
-
-#[derive(Debug)]
 pub struct Region {
     chunk_location_offsets: Vec<ChunkLocation>,
     chunk_timestamps: Vec<ChunkTimestamp>,
     chunks: Vec<Chunk>,
+}
+
+impl Region {
+    pub fn chunk_location_offsets(&self) -> &Vec<ChunkLocation> {
+        &self.chunk_location_offsets
+    }
+    pub fn chunk_timestamps(&self) -> &Vec<ChunkTimestamp> {
+        &self.chunk_timestamps
+    }
+    pub fn chunks(&self) -> &Vec<Chunk> {
+        &self.chunks
+    }
 }
 
 impl Region {
@@ -97,7 +51,7 @@ impl Region {
 
     pub fn get_chunk(&self, x: i32, z: i32) -> Option<&Chunk> {
         for chunk in &self.chunks {
-            if chunk.position.x == x && chunk.position.z == z {
+            if chunk.position().x == x && chunk.position().z == z {
                 return Some(chunk);
             }
         }
@@ -159,17 +113,17 @@ impl Region {
             _ => unimplemented!()
         }.unwrap();
         let sections = Self::parse_sections(parser_result.get_list("sections")?)?;
-        Ok(Chunk {
-            data_version: parser_result.get_int("DataVersion")?,
-            position: Position {
+        Ok(Chunk::new(
+            parser_result.get_int("DataVersion")?,
+            Position {
                 x: parser_result.get_int("xPos")?,
                 y: parser_result.get_int("yPos")?,
                 z: parser_result.get_int("zPos")?,
             },
-            status: parser_result.get_string("Status")?,
+            parser_result.get_string("Status")?,
             sections,
-            chunk_data: parser_result,
-        })
+            parser_result
+        ))
     }
 
     pub fn parse_sections(data: Vec<NbtTag>) -> Result<Vec<Section>, McaParseError> {
@@ -184,10 +138,7 @@ impl Region {
         let block_states = tag.get("block_states")?;
         let palette = block_states.get_list("palette")?;
         if palette.len() == 1 {
-            return Ok(Section {
-                blocks: vec![palette[0].get_string("Name")?; 4096],
-                section_data: tag,
-            });
+            return Ok(Section::new(vec![palette[0].get_string("Name")?; 4096], tag));
         }
         let block_data = block_states.get_long_array("data")?;
 
@@ -233,10 +184,7 @@ impl Region {
             }
         }
 
-        Ok(Section {
-            blocks,
-            section_data: tag,
-        })
+        Ok(Section::new(blocks, tag))
     }
 
     pub fn parse_region(region_data: Vec<u8>) -> Result<Region, McaParseError> {
@@ -264,31 +212,5 @@ impl Region {
             chunk_timestamps,
             chunks: chunks,
         })
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::fs;
-    use std::path::PathBuf;
-    use super::*;
-
-    #[test]
-    fn parse_region() {
-        let mut test_file = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        test_file.push("test_files/r.0.0.mca");
-        let test_data = fs::read(test_file).expect("Failed to open test file");
-
-        let region = Region::parse_region(test_data).unwrap();
-        let chunk = &region.chunks[0];
-        let data_version = chunk.data_version;
-        let pos = &chunk.position;
-        let status = &chunk.status;
-
-        eprintln!("Chunk data_version: {data_version}");
-        eprintln!("Chunk XYZ: {}", pos);
-        eprintln!("Chunk status: {status}");
-        eprintln!("Chunk block: {:?}", region.get(24, 60, 15));
-        eprintln!("Chunk finished: {}", chunk.is_finished());
     }
 }
