@@ -1,10 +1,10 @@
 use inbt::NbtTag;
-use crate::McaParseError;
+use crate::{Block, Position, McaParseError};
 
 #[derive(Debug)]
 pub struct Section {
     // 4096 blocks
-    blocks: Vec<String>,
+    blocks: Vec<Block>,
     section_data: NbtTag,
 }
 
@@ -14,7 +14,7 @@ impl Section {
         let palette = block_states.get_list("palette")?;
         if palette.len() == 1 {
             return Ok(Section {
-                blocks: vec![palette[0].get_string("Name")?; 4096],
+                blocks: vec![Block::new(palette[0].get_string("Name")?); 4096],
                 section_data: tag,
             });
         }
@@ -57,7 +57,7 @@ impl Section {
                     }
                     let block = &palette[palette_index as usize];
                     let block_name = block.get_string("Name").unwrap();
-                    blocks.push(block_name);
+                    blocks.push(Block::new(block_name));
                 }
             }
         }
@@ -69,16 +69,11 @@ impl Section {
     }
 
     /// Gets block relative to section origin
-    pub fn get(&self, x: i32, y: i32, z: i32) -> Option<&String> {
-        let range = 0..16;
-        if !range.contains(&x) || !range.contains(&y) || !range.contains(&z) {
-            return None;
-        }
-        let block_pos = y*16*16 + z*16 + x;
-        Some(&self.blocks[block_pos as usize])
+    pub fn get(&self, pos: Position) -> &Block {
+        &self.blocks[pos.block_index_in_section()]
     }
 
-    pub fn blocks(&self) -> &Vec<String> {
+    pub fn blocks(&self) -> &Vec<Block> {
         &self.blocks
     }
 

@@ -7,6 +7,8 @@ pub enum McaParseError {
     WorldLoadError(#[from] io::Error),
     #[error("Faled parsing NBT: {0}")]
     NbtParseError(#[from] inbt::NbtParseError),
+    #[error("Specified world directory is not a valid minecraft world")]
+    InvalidWorld,
     #[error("Hit end of data")]
     EndOfData,
 }

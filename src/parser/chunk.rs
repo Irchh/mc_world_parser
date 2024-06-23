@@ -1,34 +1,33 @@
 use inbt::NbtTag;
-use crate::Position;
+use crate::{Block, Position};
 use crate::parser::section::Section;
 
 #[derive(Debug)]
 pub struct Chunk {
     data_version: i32,
-    position: Position,
+    chunk_pos: Position,
     status: String,
     sections: Vec<Section>,
     chunk_data: NbtTag,
 }
 
 impl Chunk {
-    pub fn new(data_version: i32, position: Position, status: String, sections: Vec<Section>, chunk_data: NbtTag) -> Self {
+    pub fn new(data_version: i32, chunk_pos: Position, status: String, sections: Vec<Section>, chunk_data: NbtTag) -> Self {
         Self {
             data_version,
-            position,
+            chunk_pos,
             status,
             sections,
             chunk_data,
         }
     }
     /// Gets block relative to chunk origin
-    pub fn get(&self, x: i32, mut y: i32, z: i32) -> Option<&String> {
-        if !(-64..320).contains(&y) {
-            return None;
+    pub fn get(&self, pos: Position) -> Option<&Block> {
+        let section = pos.section_index_in_chunk();
+        if section.is_none() {
+            eprintln!("Warning: section index out of bounds (Original Y: {})", pos.y);
         }
-        y += 64;
-        let section = y/16;
-        self.sections[section as usize].get(x, y%16, z)
+        Some(self.sections[section? as usize].get(pos))
     }
 
     pub fn is_finished(&self) -> bool {
@@ -39,8 +38,8 @@ impl Chunk {
         self.data_version
     }
 
-    pub fn position(&self) -> &Position {
-        &self.position
+    pub fn chunk_pos(&self) -> &Position {
+        &self.chunk_pos
     }
 
     pub fn status(&self) -> &String {

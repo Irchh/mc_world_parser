@@ -1,7 +1,7 @@
 use std::iter::Peekable;
 use std::slice::Iter;
 use inbt::NbtTag;
-use crate::{McaParseError, Position};
+use crate::{Block, McaParseError, Position};
 use crate::parser::chunk::Chunk;
 use crate::parser::section::Section;
 
@@ -44,14 +44,18 @@ impl Region {
 
 impl Region {
     /// Gets block relative to region origin
-    pub fn get(&self, x: i32, y: i32, z: i32) -> Option<&String> {
-        let chunk = self.get_chunk(x/16, z/16)?;
-        chunk.get(x%16, y, z%16)
+    pub fn get(&self, pos: Position) -> Option<&Block> {
+        let chunk_pos = pos.chunk_in_region();
+        let chunk = self.get_chunk(chunk_pos.x, chunk_pos.z);
+        if chunk.is_none() {
+            eprintln!("Warning: chunk {} doesnt exist", chunk_pos);
+        }
+        chunk?.get(pos)
     }
 
     pub fn get_chunk(&self, x: i32, z: i32) -> Option<&Chunk> {
         for chunk in &self.chunks {
-            if chunk.position().x == x && chunk.position().z == z {
+            if chunk.chunk_pos().x == x && chunk.chunk_pos().z == z {
                 return Some(chunk);
             }
         }
