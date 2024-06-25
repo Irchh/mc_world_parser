@@ -1,6 +1,7 @@
 use std::iter::Peekable;
 use std::slice::Iter;
 use inbt::NbtTag;
+use log::warn;
 use crate::{Block, McaParseError, Position};
 use crate::parser::chunk::Chunk;
 use crate::parser::section::Section;
@@ -45,17 +46,16 @@ impl Region {
 impl Region {
     /// Gets block relative to region origin
     pub fn get(&self, pos: Position) -> Option<&Block> {
-        let chunk_pos = pos.chunk_in_region();
-        let chunk = self.get_chunk(chunk_pos.x, chunk_pos.z);
+        let chunk = self.get_chunk(pos.chunk_in_region());
         if chunk.is_none() {
-            eprintln!("Warning: chunk {} doesnt exist", chunk_pos);
+            warn!("Warning: chunk {} doesnt exist", pos.chunk_in_region());
         }
         chunk?.get(pos)
     }
 
-    pub fn get_chunk(&self, x: i32, z: i32) -> Option<&Chunk> {
+    pub fn get_chunk(&self, pos: Position) -> Option<&Chunk> {
         for chunk in &self.chunks {
-            if chunk.chunk_pos().x == x && chunk.chunk_pos().z == z {
+            if chunk.chunk_pos().x == pos.x && chunk.chunk_pos().z == pos.z {
                 return Some(chunk);
             }
         }
@@ -111,9 +111,9 @@ impl Region {
         }
         // TODO: convert to ParseError
         let parser_result = match compression_type {
-            1 => inbt::nbt_parser::parse_gzip(raw_data),
-            2 => inbt::nbt_parser::parse_zlib(raw_data),
-            3 => Ok(inbt::nbt_parser::parse_binary(raw_data)),
+            1 => inbt::nbt_parser::parse_gzip(raw_data.clone()),
+            2 => inbt::nbt_parser::parse_zlib(raw_data.clone()),
+            3 => Ok(inbt::nbt_parser::parse_binary(raw_data.clone())),
             _ => unimplemented!()
         }.unwrap();
         let sections = Self::parse_sections(parser_result.get_list("sections")?)?;

@@ -1,8 +1,9 @@
 use inbt::NbtTag;
+use log::{debug, warn};
 use crate::{Block, Position};
 use crate::parser::section::Section;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Chunk {
     data_version: i32,
     chunk_pos: Position,
@@ -25,9 +26,15 @@ impl Chunk {
     pub fn get(&self, pos: Position) -> Option<&Block> {
         let section = pos.section_index_in_chunk();
         if section.is_none() {
-            eprintln!("Warning: section index out of bounds (Original Y: {})", pos.y);
+            warn!("Warning: section index out of bounds (Original Y: {})", pos.y);
         }
         Some(self.sections[section? as usize].get(pos))
+    }
+
+    /// Returns a vector with chunk data that can be put directly into a chunk data packet
+    pub fn network_data(&self, f: fn(&String) -> i32) -> Vec<u8> {
+        debug!("{} sections", self.sections.len());
+        self.sections.iter().flat_map(|s| s.network_data(f)).collect()
     }
 
     pub fn is_finished(&self) -> bool {

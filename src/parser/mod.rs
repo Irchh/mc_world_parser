@@ -1,9 +1,9 @@
 #![allow(dead_code)]
 
-pub(crate) mod region;
-pub(crate) mod chunk;
-pub(crate) mod section;
-pub(crate) mod level;
+pub mod region;
+pub mod chunk;
+pub mod section;
+pub mod level;
 pub mod parse_error;
 
 use std::cmp::Ordering;
@@ -106,11 +106,9 @@ mod tests {
 
     #[test]
     fn position_conversion() {
-        let zero_pos = Position { x: 0, y: 0, z: 0 };
-        let neg_pos = Position { x: -512, y: 0, z: 0 };
-
-        assert_eq!(zero_pos.region_in_world(), Position::new(0, 0, 0));
-        assert_eq!(neg_pos.region_in_world(), Position::new(-1, 0, 0));
+        assert_eq!(Position { x: 0, y: 0, z: 0 }.region_in_world(), Position::new(0, 0, 0));
+        assert_eq!(Position { x: -512, y: 0, z: 0 }.region_in_world(), Position::new(-1, 0, 0));
+        assert_eq!(Position { x: -1, y: 0, z: 0 }.region_in_world(), Position::new(-1, 0, 0));
     }
 
     #[test]

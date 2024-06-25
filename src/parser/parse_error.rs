@@ -5,7 +5,7 @@ use thiserror::Error;
 pub enum McaParseError {
     #[error("Error loading world: {0}")]
     WorldLoadError(#[from] io::Error),
-    #[error("Faled parsing NBT: {0}")]
+    #[error("Failed parsing NBT: {0}")]
     NbtParseError(#[from] inbt::NbtParseError),
     #[error("Specified world directory is not a valid minecraft world")]
     InvalidWorld,

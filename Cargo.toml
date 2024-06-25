@@ -7,4 +7,6 @@ edition = "2021"
 
 [dependencies]
 inbt = {path = "../inbt"}
+mc_datatypes = {path = "../mc_datatypes"}
 thiserror = "1.0.60"
+log = "0.4.21"
