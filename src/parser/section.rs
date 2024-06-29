@@ -17,7 +17,7 @@ impl Section {
             return 0;
         }
         let mut palette_bits = palette_size.checked_ilog2().unwrap_or(0) as usize;
-        if usize::pow(2, palette_bits as u32) < palette_size {
+        while usize::pow(2, palette_bits as u32) < palette_size {
             palette_bits += 1;
         }
         if palette_bits < 4 {
@@ -58,28 +58,28 @@ impl Section {
         // Calculate the palette mask
         let palette_mask = Self::palette_mask(palette_bits);
         let palette_entries_per_long = 64/palette_bits;
-        let padding = 64%palette_bits;
 
-        let mut blocks = vec![];
+        let mut blocks = vec![Block::new("".to_string()); 4096];
         for y in 0..16 {
             for z in 0..16 {
                 for x in 0..16 {
                     let block_pos = y*16*16 + z*16 + x;
                     let block_data_index = block_pos/palette_entries_per_long;
-                    let block_data_sub_index = block_pos%palette_entries_per_long + 1;
-                    let mask_shift = (64-padding)-palette_bits*block_data_sub_index;
+                    let block_data_sub_index = block_pos%palette_entries_per_long;
+                    let mask_shift = palette_bits*block_data_sub_index;
                     let palette_index = (block_data[block_data_index] as u64 & (palette_mask<<mask_shift))>>mask_shift;
                     if palette_index as usize >= palette.len() {
                         // Will panic after this, just debug info for now
                         error!("palette_bits: {}", palette_bits);
                         error!("palette_mask: {:0b}", palette_mask);
                         error!("block_data: {:064b}", block_data[block_data_index]);
-                        error!("block_data_index: {}", block_data_sub_index-1);
+                        error!("block_data_index: {}", block_data_sub_index);
                         error!("palette_index: {palette_index}");
                     }
                     let block = &palette[palette_index as usize];
                     let block_name = block.get_string("Name").unwrap();
-                    blocks.push(Block::new(block_name));
+                    blocks[block_pos] = Block::new(block_name);
+                    //blocks.push(Block::new(block_name));
                 }
             }
         }
@@ -102,7 +102,7 @@ impl Section {
             block_count += (!block.identifier.eq("minecraft:air")) as u16;
         }
 
-        let bits_per_entry = Self::bits_needed_for_palette(palette.len());
+        let mut bits_per_entry = Self::bits_needed_for_palette(palette.len());
 
         // Block count as short
         network_data.append(&mut block_count.to_be_bytes().to_vec());
@@ -121,7 +121,7 @@ impl Section {
             let mut longs = vec![];
             for blocks in self.blocks.chunks(entries_per_long) {
                 let mut long = 0;
-                for (i, block) in blocks.iter().rev().enumerate() {
+                for (i, block) in blocks.iter().enumerate() {
                     let mut palette_index = None;
                     for (i, palette_entry) in palette.iter().enumerate() {
                         if palette_entry.eq(&block.identifier) {
@@ -136,12 +136,24 @@ impl Section {
             network_data.append(&mut VarInt::new(longs.len() as i32).bytes);
             network_data.append(&mut longs.iter().flat_map(|l| l.to_be_bytes().to_vec()).collect());
         } else {
-            todo!()
+            let entries_per_long = 64/bits_per_entry;
+
+            let mut longs = vec![];
+            for blocks in self.blocks.chunks(entries_per_long) {
+                let mut long = 0;
+                for (i, block) in blocks.iter().enumerate() {
+                    let block_id = f(&block.identifier) as u64;
+                    long |= block_id<<(i*bits_per_entry)
+                }
+                longs.push(long);
+            }
+            network_data.append(&mut VarInt::new(longs.len() as i32).bytes);
+            network_data.append(&mut longs.iter().flat_map(|l| l.to_be_bytes().to_vec()).collect());
         }
 
         // Fake biome info
         network_data.push(0); // Only a single biome so no bits per entry
-        network_data.append(&mut VarInt::new(3).bytes); // Which biome? biome nr. 0
+        network_data.append(&mut VarInt::new(8).bytes); // Which biome? biome nr. 8
         network_data.push(0); // Data array is not included, but we still need to have the length
         network_data
     }
