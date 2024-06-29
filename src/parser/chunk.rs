@@ -1,5 +1,5 @@
 use inbt::NbtTag;
-use log::{debug, warn};
+use log::{trace, warn};
 use crate::{Block, Position};
 use crate::parser::section::Section;
 
@@ -33,7 +33,7 @@ impl Chunk {
 
     /// Returns a vector with chunk data that can be put directly into a chunk data packet
     pub fn network_data(&self, f: fn(&String) -> i32) -> Vec<u8> {
-        debug!("{} sections", self.sections.len());
+        trace!("{} sections", self.sections.len());
         self.sections.iter().flat_map(|s| s.network_data(f)).collect()
     }
 

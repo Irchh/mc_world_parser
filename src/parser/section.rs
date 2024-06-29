@@ -1,7 +1,7 @@
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::BTreeMap;
 use inbt::NbtTag;
-use log::{error, trace};
-use mc_datatypes::{VarInt, VarLong};
+use log::{debug, error};
+use mc_datatypes::VarInt;
 use crate::{Block, Position, McaParseError};
 
 #[derive(Debug, Clone)]
@@ -22,6 +22,9 @@ impl Section {
         }
         if palette_bits < 4 {
             palette_bits = 4;
+        }
+        if palette_bits > 8 {
+            palette_bits = 15;
         }
         palette_bits
     }
@@ -51,9 +54,9 @@ impl Section {
         let block_data = block_states.get_long_array("data")?;
 
         // Bits needed to store the index into palette list, minimum 4 bits.
-        let mut palette_bits = Self::bits_needed_for_palette(palette.len());
+        let palette_bits = Self::bits_needed_for_palette(palette.len());
         // Calculate the palette mask
-        let mut palette_mask = Self::palette_mask(palette_bits);
+        let palette_mask = Self::palette_mask(palette_bits);
         let palette_entries_per_long = 64/palette_bits;
         let padding = 64%palette_bits;
 
@@ -89,64 +92,57 @@ impl Section {
 
     /// Takes a function to map identifiers to numbers, e.g. minecraft:air -> 0
     pub fn network_data(&self, f: fn(&String) -> i32) -> Vec<u8> {
-        let palette = self.blocks.iter().cloned()
-            .map(|b| b.identifier)
-            .collect::<Vec<_>>();
-
-        let block_count = self.blocks.iter().filter(|b| !b.identifier.eq("minecraft:air")).count() as i32;
-        let mut block_indexes = self.blocks.iter().map(|block| {
-            let (palette_index, _) = palette.iter().enumerate().find(|(i, s)| (*s).eq(&block.identifier)).unwrap();
-            palette_index
-        });
-
         let mut network_data = vec![];
-        // Block count
-        network_data.append(&mut VarInt::new(block_count).bytes);
+        let mut palette = vec![];
+        let mut block_count = 0;
+        for block in &self.blocks {
+            if !palette.contains(&block.identifier) {
+                palette.push(block.identifier.clone());
+            }
+            block_count += (!block.identifier.eq("minecraft:air")) as u16;
+        }
 
-        let palette_bits = Self::bits_needed_for_palette(palette.len());
-        let palette_mask = Self::palette_mask(palette_bits);
-        let padding = 64%palette_bits;
-        let entries_per_long = 64/palette_bits;
-        let mut palette_longs = vec![];
+        let bits_per_entry = Self::bits_needed_for_palette(palette.len());
 
-        if palette_bits == 0 {
-            network_data.push(0);
+        // Block count as short
+        network_data.append(&mut block_count.to_be_bytes().to_vec());
+
+        network_data.push(bits_per_entry as u8);
+
+        if bits_per_entry == 0 {
             network_data.append(&mut VarInt::new(f(&palette[0])).bytes);
             network_data.push(0);
-        } else if (4..=8).contains(&palette_bits) {
-            for (i, block_index) in block_indexes.enumerate() {
-                if i%entries_per_long == 0 {
-                    palette_longs.push(0);
-                }
-                let current_long = palette_longs.last_mut().unwrap();
-                *current_long |= ((block_index as u64)&palette_mask)<<(64-padding-palette_bits*(i%entries_per_long+1));
-            }
-
-            // Block states
-            network_data.push(palette_bits as u8);
-            // Indirect
+        } else if (4..9).contains(&bits_per_entry) {
             network_data.append(&mut VarInt::new(palette.len() as i32).bytes);
             network_data.append(&mut palette.iter().flat_map(|s| VarInt::new(f(s)).bytes).collect::<Vec<u8>>());
-            // Data array
-            network_data.append(&mut palette_longs.iter().flat_map(|i| u64::to_be_bytes(*i)).collect::<Vec<u8>>());
-        } else {
-            for (i, block) in self.blocks.iter().enumerate() {
-                if i%entries_per_long == 0 {
-                    palette_longs.push(0);
-                }
-                let current_long = palette_longs.last_mut().unwrap();
-                //trace!("padding: {padding}, palette_bits: {palette_bits}, entries_per_long: {entries_per_long}");
-                *current_long |= ((f(&block.identifier) as u64)&palette_mask)<<(64-padding-palette_bits*(i%entries_per_long+1));
-            }
 
-            network_data.push(palette_bits as u8);
-            network_data.append(&mut palette_longs.iter().flat_map(|i| u64::to_be_bytes(*i)).collect::<Vec<u8>>());
+            let entries_per_long = 64/bits_per_entry;
+
+            let mut longs = vec![];
+            for blocks in self.blocks.chunks(entries_per_long) {
+                let mut long = 0;
+                for (i, block) in blocks.iter().rev().enumerate() {
+                    let mut palette_index = None;
+                    for (i, palette_entry) in palette.iter().enumerate() {
+                        if palette_entry.eq(&block.identifier) {
+                            palette_index = Some(i);
+                            break;
+                        }
+                    }
+                    long |= palette_index.unwrap()<<(i*bits_per_entry)
+                }
+                longs.push(long);
+            }
+            network_data.append(&mut VarInt::new(longs.len() as i32).bytes);
+            network_data.append(&mut longs.iter().flat_map(|l| l.to_be_bytes().to_vec()).collect());
+        } else {
+            todo!()
         }
 
         // Fake biome info
         network_data.push(0); // Only a single biome so no bits per entry
-        network_data.append(&mut VarInt::new(0).bytes); // Which biome? biome nr. 0
-        network_data.push(0); // Data array is not included but we still need to have the length
+        network_data.append(&mut VarInt::new(3).bytes); // Which biome? biome nr. 0
+        network_data.push(0); // Data array is not included, but we still need to have the length
         network_data
     }
 
