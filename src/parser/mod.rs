@@ -7,7 +7,9 @@ pub mod level;
 pub mod parse_error;
 
 use std::cmp::Ordering;
+use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
+use inbt::{NbtParseError, NbtTag};
 
 #[derive(Debug, Copy, Clone, PartialEq, PartialOrd)]
 pub struct Position {
@@ -87,22 +89,48 @@ impl Display for Position {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Block {
     identifier: String,
+    properties: BTreeMap<String, String>
 }
 
 impl Block {
-    pub fn new(identifier: String) -> Self {
-        Self {
+    pub fn new(nbt_data: &NbtTag) -> Result<Self, NbtParseError> {
+        let identifier = nbt_data.get_string("Name")?;
+        let nbt_properties = nbt_data.get_compound("Properties").unwrap_or(vec![]);
+        let mut properties = BTreeMap::new();
+
+        for property in nbt_properties {
+            match property {
+                NbtTag::String(name, value) => {
+                    properties.insert(name, value);
+                }
+                _ => {}
+            }
+        }
+        Ok(Self {
             identifier,
+            properties,
+        })
+    }
+
+    pub fn default() -> Self {
+        Self {
+            identifier: "minecraft:air".to_string(),
+            properties: Default::default(),
         }
     }
 
     pub fn identifier(&self) -> &String {
         &self.identifier
     }
+
+    pub fn properties(&self) -> &BTreeMap<String, String> {
+        &self.properties
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
     use std::fs;
     use std::path::PathBuf;
     use crate::parser::region::Region;
@@ -121,7 +149,7 @@ mod tests {
         eprintln!("World: {:?}", world);
         eprintln!("World: {:?}", world.get_block(Position::new(-1, 83, 1)));
 
-        assert_eq!(world.get_block(Position::new(24, 60, 15)), Some(Block { identifier: "minecraft:water".to_string() }));
+        assert_eq!(world.get_block(Position::new(24, 60, 15)), Some(Block { identifier: "minecraft:water".to_string(), properties: BTreeMap::from([("level".to_string(),  "0".to_string())]) }));
 
         let mut test_file = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         test_file.push("test_files/r.0.0.mca");

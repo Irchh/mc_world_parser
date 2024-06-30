@@ -52,7 +52,7 @@ impl Section {
         if palette.len() == 1 {
             return Ok(Section {
                 blocks: vec![0; 4096],
-                palette: vec![Block::new(palette[0].get_string("Name")?)],
+                palette: vec![Block::new(&palette[0])?],
             });
         }
         let block_data = block_states.get_long_array("data")?;
@@ -63,7 +63,7 @@ impl Section {
         let palette_mask = Self::palette_mask(palette_bits);
         let palette_entries_per_long = 64/palette_bits;
 
-        let mut blocks = vec![Block::new("".to_string()); 4096];
+        let mut blocks = vec![Block::default(); 4096];
         for y in 0..16 {
             for z in 0..16 {
                 for x in 0..16 {
@@ -81,8 +81,7 @@ impl Section {
                         error!("palette_index: {palette_index}");
                     }
                     let block = &palette[palette_index as usize];
-                    let block_name = block.get_string("Name").unwrap();
-                    blocks[block_pos] = Block::new(block_name);
+                    blocks[block_pos] = Block::new(block)?;
                     //blocks.push(Block::new(block_name));
                 }
             }
