@@ -11,6 +11,10 @@ pub struct Section {
     section_data: NbtTag,
 }
 
+pub trait BlockIDGetter {
+    fn id_of(&self, block: &Block) -> i32;
+}
+
 impl Section {
     fn bits_needed_for_palette(palette_size: usize) -> usize {
         if palette_size == 1 {
@@ -91,13 +95,13 @@ impl Section {
     }
 
     /// Takes a function to map identifiers to numbers, e.g. minecraft:air -> 0
-    pub fn network_data(&self, f: fn(&String) -> i32) -> Vec<u8> {
+    pub fn network_data(&self, id_getter: &Box<dyn BlockIDGetter>) -> Vec<u8> {
         let mut network_data = vec![];
-        let mut palette = vec![];
+        let mut palette: Vec<Block> = vec![];
         let mut block_count = 0;
         for block in &self.blocks {
-            if !palette.contains(&block.identifier) {
-                palette.push(block.identifier.clone());
+            if !palette.contains(&block) {
+                palette.push(block.clone());
             }
             block_count += (!block.identifier.eq("minecraft:air")) as u16;
         }
@@ -110,11 +114,11 @@ impl Section {
         network_data.push(bits_per_entry as u8);
 
         if bits_per_entry == 0 {
-            network_data.append(&mut VarInt::new(f(&palette[0])).bytes);
+            network_data.append(&mut VarInt::new(id_getter.id_of(&palette[0])).bytes);
             network_data.push(0);
         } else if (4..9).contains(&bits_per_entry) {
             network_data.append(&mut VarInt::new(palette.len() as i32).bytes);
-            network_data.append(&mut palette.iter().flat_map(|s| VarInt::new(f(s)).bytes).collect::<Vec<u8>>());
+            network_data.append(&mut palette.iter().flat_map(|s| VarInt::new(id_getter.id_of(s)).bytes).collect::<Vec<u8>>());
 
             let entries_per_long = 64/bits_per_entry;
 
@@ -124,7 +128,7 @@ impl Section {
                 for (i, block) in blocks.iter().enumerate() {
                     let mut palette_index = None;
                     for (i, palette_entry) in palette.iter().enumerate() {
-                        if palette_entry.eq(&block.identifier) {
+                        if palette_entry.eq(&block) {
                             palette_index = Some(i);
                             break;
                         }
@@ -142,7 +146,7 @@ impl Section {
             for blocks in self.blocks.chunks(entries_per_long) {
                 let mut long = 0;
                 for (i, block) in blocks.iter().enumerate() {
-                    let block_id = f(&block.identifier) as u64;
+                    let block_id = id_getter.id_of(&block) as u64;
                     long |= block_id<<(i*bits_per_entry)
                 }
                 longs.push(long);

@@ -95,6 +95,10 @@ impl Block {
             identifier,
         }
     }
+
+    pub fn identifier(&self) -> &String {
+        &self.identifier
+    }
 }
 
 #[cfg(test)]
