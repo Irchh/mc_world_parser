@@ -43,7 +43,7 @@ impl World {
             self.load_region(pos.region_in_world())?;
             self.loaded_regions.get(&pos.region_in_world())?
         };
-        region.get(pos).cloned()
+        region.get(pos)
     }
 
     pub fn get_chunk(&mut self, pos: Position) -> Option<Chunk> {

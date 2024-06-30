@@ -10,21 +10,19 @@ pub struct Chunk {
     chunk_pos: Position,
     status: String,
     sections: Vec<Section>,
-    chunk_data: NbtTag,
 }
 
 impl Chunk {
-    pub fn new(data_version: i32, chunk_pos: Position, status: String, sections: Vec<Section>, chunk_data: NbtTag) -> Self {
+    pub fn new(data_version: i32, chunk_pos: Position, status: String, sections: Vec<Section>) -> Self {
         Self {
             data_version,
             chunk_pos,
             status,
             sections,
-            chunk_data,
         }
     }
     /// Gets block relative to chunk origin
-    pub fn get(&self, pos: Position) -> Option<&Block> {
+    pub fn get(&self, pos: Position) -> Option<Block> {
         let section = pos.section_index_in_chunk();
         if section.is_none() {
             warn!("Warning: section index out of bounds (Original Y: {})", pos.y);
@@ -56,9 +54,5 @@ impl Chunk {
 
     pub fn sections(&self) -> &Vec<Section> {
         &self.sections
-    }
-
-    pub fn chunk_data(&self) -> &NbtTag {
-        &self.chunk_data
     }
 }

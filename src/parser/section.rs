@@ -7,8 +7,8 @@ use crate::{Block, Position, McaParseError};
 #[derive(Debug, Clone)]
 pub struct Section {
     // 4096 blocks
-    blocks: Vec<Block>,
-    section_data: NbtTag,
+    blocks: Vec<u16>, // Can hold numbers up to 64k, meanwhile each section can hold a max of 4k blocks
+    palette: Vec<Block>,
 }
 
 pub trait BlockIDGetter {
@@ -51,8 +51,8 @@ impl Section {
         let palette = block_states.get_list("palette")?;
         if palette.len() == 1 {
             return Ok(Section {
-                blocks: vec![Block::new(palette[0].get_string("Name")?); 4096],
-                section_data: tag,
+                blocks: vec![0; 4096],
+                palette: vec![Block::new(palette[0].get_string("Name")?)],
             });
         }
         let block_data = block_states.get_long_array("data")?;
@@ -88,9 +88,19 @@ impl Section {
             }
         }
 
+        let mut palette = vec![];
+        let mut palette_indexes = vec![];
+        for block in blocks {
+            if !palette.contains(&block) {
+                palette.push(block.clone());
+            }
+            let index = palette.iter().enumerate().find(|b| b.1.eq(&block)).unwrap().0;
+            palette_indexes.push(index as u16);
+        }
+
         Ok(Section {
-            blocks,
-            section_data: tag,
+            blocks: palette_indexes,
+            palette,
         })
     }
 
@@ -99,8 +109,9 @@ impl Section {
         let mut network_data = vec![];
         let mut palette: Vec<Block> = vec![];
         let mut block_count = 0;
-        for block in &self.blocks {
-            if !palette.contains(&block) {
+        for block_indexes in &self.blocks {
+            let block = &self.palette[*block_indexes as usize];
+            if !palette.contains(block) {
                 palette.push(block.clone());
             }
             block_count += (!block.identifier.eq("minecraft:air")) as u16;
@@ -125,10 +136,11 @@ impl Section {
             let mut longs = vec![];
             for blocks in self.blocks.chunks(entries_per_long) {
                 let mut long = 0;
-                for (i, block) in blocks.iter().enumerate() {
+                for (i, block_index) in blocks.iter().enumerate() {
+                    let block = &self.palette[*block_index as usize];
                     let mut palette_index = None;
                     for (i, palette_entry) in palette.iter().enumerate() {
-                        if palette_entry.eq(&block) {
+                        if palette_entry.eq(block) {
                             palette_index = Some(i);
                             break;
                         }
@@ -145,8 +157,9 @@ impl Section {
             let mut longs = vec![];
             for blocks in self.blocks.chunks(entries_per_long) {
                 let mut long = 0;
-                for (i, block) in blocks.iter().enumerate() {
-                    let block_id = id_getter.id_of(&block) as u64;
+                for (i, block_index) in blocks.iter().enumerate() {
+                    let block = &self.palette[*block_index as usize];
+                    let block_id = id_getter.id_of(block) as u64;
                     long |= block_id<<(i*bits_per_entry)
                 }
                 longs.push(long);
@@ -163,15 +176,7 @@ impl Section {
     }
 
     /// Gets block relative to section origin
-    pub fn get(&self, pos: Position) -> &Block {
-        &self.blocks[pos.block_index_in_section()]
-    }
-
-    pub fn blocks(&self) -> &Vec<Block> {
-        &self.blocks
-    }
-
-    pub fn section_data(&self) -> &NbtTag {
-        &self.section_data
+    pub fn get(&self, pos: Position) -> Block {
+        self.palette[self.blocks[pos.block_index_in_section()] as usize].clone()
     }
 }

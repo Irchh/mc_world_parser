@@ -45,7 +45,7 @@ impl Region {
 
 impl Region {
     /// Gets block relative to region origin
-    pub fn get(&self, pos: Position) -> Option<&Block> {
+    pub fn get(&self, pos: Position) -> Option<Block> {
         let chunk = self.get_chunk(pos.chunk_in_region());
         if chunk.is_none() {
             warn!("Warning: chunk {} doesnt exist", pos.chunk_in_region());
@@ -126,7 +126,6 @@ impl Region {
             },
             parser_result.get_string("Status")?,
             sections,
-            parser_result
         ))
     }
 
